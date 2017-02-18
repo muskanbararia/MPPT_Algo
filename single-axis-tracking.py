@@ -485,3 +485,20 @@ ax.set_ylabel('Current (A)')
 ax.set_ylim(0, None)
 ax.set_title('IV curves at multiple times')
 ax.legend()
+
+#Plotting Light current, saturation current,shunt resistance
+photocurrent, saturation_current, resistance_series, resistance_shunt, nNsVth = (
+    pvsystem.calcparams_desoto(total_irrad['poa_global'],
+                                 temp_cell=temps['temp_cell'],
+                                 alpha_isc=cecmodule['alpha_sc'],
+                                 module_parameters=cecmodule,
+                                 EgRef=1.121,
+                                 dEgdT=-0.0002677) )
+photocurrent.plot()
+plt.ylabel('Light current I_L (A)')
+saturation_current.plot()
+plt.ylabel('Saturation current I_0 (A)')
+resistance_shunt.plot()
+plt.ylabel('Shunt resistance (ohms)')
+plt.ylim(0,100)
+
