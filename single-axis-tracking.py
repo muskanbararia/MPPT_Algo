@@ -197,7 +197,7 @@ print('cos(axis_azimuth_south)={}, sin(axis_azimuth_south)={}'
 print('cos(axis_tilt)={}, sin(axis_tilt)={}'
       .format(cosd(axis_tilt), sind(axis_tilt)))
 
-#?
+#rotate about x-axis by angle -axis_tilt so that y-axis is also parallel to earth surface
 rot_x = np.array([[1, 0, 0], [0, cosd(-axis_tilt), -sind(-axis_tilt)], [0, sind(-axis_tilt), cosd(-axis_tilt)]])
 
 # panel_norm_earth contains the normal vector expressed in earth-surface coordinates
@@ -213,7 +213,7 @@ panel_norm_earth_mag = np.sqrt(np.nansum(panel_norm_earth**2, axis=1))
 projected_normal_mag = np.sqrt(np.nansum(projected_normal**2, axis=1))
 #print('panel_norm_earth_mag={}, projected_normal_mag={}'.format(panel_norm_earth_mag, projected_normal_mag))
 
-#?
+#First rotate about x-axis by angle -axis_tilt so that y-axis is also parallel to earth surface, then project.
 projected_normal = (projected_normal.T / projected_normal_mag).T
 
 panel_norm_earth_df = pd.DataFrame(panel_norm_earth, columns=('x','y','z'), index=times)
@@ -222,5 +222,6 @@ plt.title('panel normal vector components in Earth coordinate system')
 
 projected_normal_df = pd.DataFrame(projected_normal, columns=('x','y','z'), index=times)
 projected_normal_df.plot()
+
 plt.title('panel normal vector projected to surface in Earth coordinate system')
 
