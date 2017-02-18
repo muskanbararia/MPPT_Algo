@@ -270,5 +270,218 @@ winds = pd.Series([10, 5, 0], index=times)
 #Plotting temp_cell vs temp_module
 pvtemps = pvsystem.sapm_celltemp(irrads, winds, temps)
 pvtemps.plot()
+#Plotting temperature vs wind speed for temp_cell and temp_module
+wind = np.linspace(0,20,21)
+temps = pd.DataFrame(pvsystem.sapm_celltemp(900, wind, 20), index=wind)
+temps.plot()
+plt.legend()
+plt.xlabel('wind speed (m/s)')
+plt.ylabel('temperature (deg C)')
+
+#Cell and module temperature as a function of ambient temperature.
+atemp = np.linspace(-20,50,71)
+temps = pvsystem.sapm_celltemp(900, 2, atemp).set_index(atemp)
+temps.plot()
+plt.legend()
+plt.xlabel('ambient temperature (deg C)')
+plt.ylabel('temperature (deg C)')
+
+#Cell and module temperature as a function of incident irradiance.
+irrad = np.linspace(0,1000,101)
+temps = pvsystem.sapm_celltemp(irrad, 2, 20).set_index(irrad)
+temps.plot()
+plt.legend()
+plt.xlabel('incident irradiance (W/m**2)')
+plt.ylabel('temperature (deg C)')
+
+#Cell and module temperature for different module and racking types.
+models = ['open_rack_cell_glassback',
+          'roof_mount_cell_glassback',
+          'open_rack_cell_polymerback',
+          'insulated_back_polymerback',
+          'open_rack_polymer_thinfilm_steel',
+          '22x_concentrator_tracker']
+
+temps = pd.DataFrame(index=['temp_cell','temp_module'])
+
+for model in models:
+    temps[model] = pd.Series(pvsystem.sapm_celltemp(1000, 5, 20, model=model).ix[0])
+
+temps.T.plot(kind='bar') # try removing the transpose operation and replotting
+plt.legend()
+plt.ylabel('temperature (deg C)')
+
+#Calculating ac vs dc by accessing inverter information
+inverters = pvsystem.retrieve_sam('sandiainverter')
+inverters
+vdcs = pd.Series(np.linspace(0,50,51))
+idcs = pd.Series(np.linspace(0,11,110))
+pdcs = idcs * vdcs
+
+pacs = pvsystem.snlinverter(vdcs, pdcs, inverters['ABB__MICRO_0_25_I_OUTD_US_208_208V__CEC_2014_'])
+#pacs.plot()
+plt.plot(pacs, pdcs)
+plt.ylabel('ac power')
+plt.xlabel('dc power')
+
+#Accessing the cec database
+cec_modules = pvsystem.retrieve_sam('cecmod')
+cec_modules
+cecmodule = cec_modules.Example_Module 
+cecmodule
+sandia_modules = pvsystem.retrieve_sam(name='SandiaMod')
+sandia_modules
+sandia_module = sandia_modules.Canadian_Solar_CS5P_220M___2009_
+sandia_module
+
+#Generate some irradiance data for modeling.
+from pvlib import clearsky
+from pvlib import irradiance
+from pvlib import atmosphere
+from pvlib.location import Location
+
+tus = Location(32.2, -111, 'US/Arizona', 700, 'Tucson')
+
+times_loc = pd.date_range(start=datetime.datetime(2014,4,1), end=datetime.datetime(2014,4,2), freq='30s', tz=tus.tz)
+solpos = pvlib.solarposition.get_solarposition(times_loc, tus.latitude, tus.longitude)
+dni_extra = pvlib.irradiance.extraradiation(times_loc)
+airmass = pvlib.atmosphere.relativeairmass(solpos['apparent_zenith'])
+pressure = pvlib.atmosphere.alt2pres(tus.altitude)
+am_abs = pvlib.atmosphere.absoluteairmass(airmass, pressure)
+cs = tus.get_clearsky(times_loc)
+
+surface_tilt = tus.latitude
+surface_azimuth = 180  # pointing south
+
+aoi = pvlib.irradiance.aoi(surface_tilt, surface_azimuth,
+                           solpos['apparent_zenith'], solpos['azimuth'])
+total_irrad = pvlib.irradiance.total_irrad(surface_tilt,
+                                           surface_azimuth,
+                                           solpos['apparent_zenith'],
+                                           solpos['azimuth'],
+                                           cs['dni'], cs['ghi'], cs['dhi'],
+                                           dni_extra=dni_extra,
+                                           model='haydavies')
+#Plotting the module
+module = sandia_module
+
+# a sunny, calm, and hot day in the desert
+temps = pvsystem.sapm_celltemp(total_irrad['poa_global'], 0, 30)
+
+effective_irradiance = pvlib.pvsystem.sapm_effective_irradiance(
+    total_irrad['poa_direct'], total_irrad['poa_diffuse'],
+    am_abs, aoi, module)
+
+sapm_1 = pvlib.pvsystem.sapm(effective_irradiance, temps['temp_cell'], module)
+
+sapm_1.plot()
 
 
+def plot_sapm(sapm_data, effective_irradiance):
+    """
+    Makes a nice figure with the SAPM data.
+    
+    Parameters
+    ----------
+    sapm_data : DataFrame
+        The output of ``pvsystem.sapm``
+    """
+    fig, axes = plt.subplots(2, 3, figsize=(16,10), sharex=False, sharey=False, squeeze=False)
+    plt.subplots_adjust(wspace=.2, hspace=.3)
+
+    ax = axes[0,0]
+    sapm_data.filter(like='i_').plot(ax=ax)
+    ax.set_ylabel('Current (A)')
+
+    ax = axes[0,1]
+    sapm_data.filter(like='v_').plot(ax=ax)
+    ax.set_ylabel('Voltage (V)')
+
+    ax = axes[0,2]
+    sapm_data.filter(like='p_').plot(ax=ax)
+    ax.set_ylabel('Power (W)')
+
+    ax = axes[1,0]
+    [ax.plot(effective_irradiance, current, label=name) for name, current in
+     sapm_data.filter(like='i_').iteritems()]
+    ax.set_ylabel('Current (A)')
+    ax.set_xlabel('Effective Irradiance')
+    ax.legend(loc=2)
+
+    ax = axes[1,1]
+    [ax.plot(effective_irradiance, voltage, label=name) for name, voltage in
+     sapm_data.filter(like='v_').iteritems()]
+    ax.set_ylabel('Voltage (V)')
+    ax.set_xlabel('Effective Irradiance')
+    ax.legend(loc=4)
+
+    ax = axes[1,2]
+    ax.plot(effective_irradiance, sapm_data['p_mp'], label='p_mp')
+    ax.set_ylabel('Power (W)')
+    ax.set_xlabel('Effective Irradiance')
+    ax.legend(loc=2)
+
+    # needed to show the time ticks
+    for ax in axes.flatten():
+        for tk in ax.get_xticklabels():
+            tk.set_visible(True)
+plot_sapm(sapm_1, effective_irradiance)
+
+#For comparison, here's the SAPM for a sunny, windy, cold version of the same day.
+temps = pvsystem.sapm_celltemp(total_irrad['poa_global'], 10, 5)
+
+sapm_2 = pvlib.pvsystem.sapm(effective_irradiance, temps['temp_cell'], module)
+
+plot_sapm(sapm_2, effective_irradiance)
+
+#Comparison of hot calm vs cold windy day
+sapm_1['p_mp'].plot(label='30 C,  0 m/s')
+sapm_2['p_mp'].plot(label=' 5 C, 10 m/s')
+plt.legend()
+plt.ylabel('Pmp')
+plt.title('Comparison of a hot, calm day and a cold, windy day')
+
+#Plotting IV curve. The IV curve function only calculates the 5 points of the SAPM.
+
+import warnings
+warnings.simplefilter('ignore', np.RankWarning)
+
+def sapm_to_ivframe(sapm_row):
+    pnt = sapm_row.T.ix[:,0]
+
+    ivframe = {'Isc': (pnt['i_sc'], 0),
+              'Pmp': (pnt['i_mp'], pnt['v_mp']),
+              'Ix': (pnt['i_x'], 0.5*pnt['v_oc']),
+              'Ixx': (pnt['i_xx'], 0.5*(pnt['v_oc']+pnt['v_mp'])),
+              'Voc': (0, pnt['v_oc'])}
+    ivframe = pd.DataFrame(ivframe, index=['current', 'voltage']).T
+    ivframe = ivframe.sort_values(by='voltage')
+    
+    return ivframe
+
+def ivframe_to_ivcurve(ivframe, points=100):
+    ivfit_coefs = np.polyfit(ivframe['voltage'], ivframe['current'], 30)
+    fit_voltages = np.linspace(0, ivframe.ix['Voc', 'voltage'], points)
+    fit_currents = np.polyval(ivfit_coefs, fit_voltages)
+    
+    return fit_voltages, fit_currents
+sapm_to_ivframe(sapm_1['2014-04-01 10:00:00'])
+times = ['2014-04-01 07:00:00', '2014-04-01 08:00:00', '2014-04-01 09:00:00', 
+         '2014-04-01 10:00:00', '2014-04-01 11:00:00', '2014-04-01 12:00:00']
+times.reverse()
+
+fig, ax = plt.subplots(1, 1, figsize=(12,8))
+
+for time in times:
+    ivframe = sapm_to_ivframe(sapm_1[time])
+
+    fit_voltages, fit_currents = ivframe_to_ivcurve(ivframe)
+
+    ax.plot(fit_voltages, fit_currents, label=time)
+    ax.plot(ivframe['voltage'], ivframe['current'], 'ko')
+    
+ax.set_xlabel('Voltage (V)')
+ax.set_ylabel('Current (A)')
+ax.set_ylim(0, None)
+ax.set_title('IV curves at multiple times')
+ax.legend()
