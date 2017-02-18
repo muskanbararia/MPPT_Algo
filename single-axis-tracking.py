@@ -225,3 +225,50 @@ projected_normal_df.plot()
 
 plt.title('panel normal vector projected to surface in Earth coordinate system')
 
+#importing pvsystem to study Sandia National Lab's Database
+from pvlib import pvsystem
+
+#pvlib can import TMY2 and TMY3 data. Here, we import the example files. tmy3 is for Sandpoint and tmy2 is for Miami
+pvlib_abspath = os.path.dirname(os.path.abspath(inspect.getfile(pvlib)))
+tmy3_data, tmy3_metadata = pvlib.tmy.readtmy3(os.path.join(pvlib_abspath, 'data', '703165TY.csv'))
+tmy2_data, tmy2_metadata = pvlib.tmy.readtmy2(os.path.join(pvlib_abspath, 'data', '12839.tm2'))
+pvlib.pvsystem.systemdef(tmy3_metadata, 0, 0, .1, 5, 5)
+pvlib.pvsystem.systemdef(tmy2_metadata, 0, 0, .1, 5, 5)
+
+#Angle of incidence modifiers. Here we are demonstarting Ashrae modifier using .ashraeiam
+angles = np.linspace(-180,180,3601)
+ashraeiam = pd.Series(pvsystem.ashraeiam(angles, .05), index=angles)
+ashraeiam.plot()
+plt.ylabel('ASHRAE modifier')
+plt.xlabel('input angle (deg)')
+
+#Angle of incidence modifiers. Here we are demonstarting physical modifier using .physicaliam
+angles = np.linspace(-180,180,3601)
+physicaliam = pd.Series(pvsystem.physicaliam(angles), index=angles)
+physicaliam.plot()
+plt.ylabel('physical modifier')
+plt.xlabel('input index')
+
+#Here we are comparing the above two modifiers
+plt.figure()
+ashraeiam.plot(label='ASHRAE')
+physicaliam.plot(label='physical')
+plt.ylabel('modifier')
+plt.xlabel('input angle (deg)')
+plt.legend()
+
+#PV system efficiency can vary by up to 0.5% per degree C, so it's important to accurately model cell and module temperature. The sapm_celltemp function uses plane of array irradiance, ambient temperature, wind speed, and module and racking type to calculate cell and module temperatures. The default parameter set is open_rack_cell_glassback.
+
+# scalar inputs
+pvsystem.sapm_celltemp(900, 5, 20) # irrad, wind, temp
+
+# vector inputs
+times = pd.DatetimeIndex(start='2015-01-01', end='2015-01-02', freq='12H')
+temps = pd.Series([0, 10, 5], index=times)
+irrads = pd.Series([0, 500, 0], index=times)
+winds = pd.Series([10, 5, 0], index=times)
+#Plotting temp_cell vs temp_module
+pvtemps = pvsystem.sapm_celltemp(irrads, winds, temps)
+pvtemps.plot()
+
+
