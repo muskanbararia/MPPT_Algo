@@ -1,4 +1,4 @@
-#Jupyter Notebook- Python PV-Lib methods to simulate results of Solar Tracking Allgorithms
+#Jupyter Notebook- Python PV-Lib methods to simulate results of Solar Tracking Algorithms
 
 %matplotlib inline
 import matplotlib.pyplot as plt
